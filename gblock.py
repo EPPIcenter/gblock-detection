@@ -67,11 +67,15 @@ def parse_gblock_sequences(filepath):
     return gblocks
 
 def sanitize_filename(filename):
-    match = re.search(r"(?:Spike-In|Control\d+)-(.+?)_R[12]_.*$", filename)
-    if match:
-        return match.group(1)
-    else:
-        raise ValueError(f"Invalid filename pattern: {filename}")
+    """Return the filename in the preferred format."""
+
+    return filename
+
+    # match = re.search(r"(?:Spike-In|Control\d+)-(.+?)_R[12]_.*$", filename)
+    # if match:
+    #     return match.group(1)
+    # else:
+    #     raise ValueError(f"Invalid filename pattern: {filename}")
 
 def process_fastq(fastq_file, reads_directory, kmer_index, gblocks, kmer_size, method="alignment"):
     filepath = os.path.join(reads_directory, fastq_file)

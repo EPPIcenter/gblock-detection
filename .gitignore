@@ -1,2 +1,5 @@
 *.json
 adapters.csv
+__pycache__/
+venv/
+.env

@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "gblock-detection"
+version = "0.1.0"
+description = ""
+authors = ["Brian Palmer <brian.palmer@ucsf.edu>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+biopython = "^1.82"
+pandas = "^2.1.4"
+seaborn = "^0.13.1"
+matplotlib = "^3.8.2"
+
+[tool.poetry.group.dev.dependencies]
+tqdm = "^4.66.1"
+matplotlib = "^3.8.2"
+numpy = "^1.26.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

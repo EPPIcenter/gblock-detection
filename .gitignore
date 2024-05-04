@@ -3,3 +3,5 @@ adapters.csv
 __pycache__/
 venv/
 .env
+*.log
+results

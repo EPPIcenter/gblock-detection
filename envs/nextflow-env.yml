@@ -1,0 +1,5 @@
+name: nf-22
+channels:
+- bioconda
+dependencies:
+- nextflow=23.04.3

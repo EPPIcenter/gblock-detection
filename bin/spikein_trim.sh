@@ -43,7 +43,6 @@ fi
 trim_and_demultiplex_paired() {
     local fwd_fastq_file=$1
     local rev_fastq_file=$2
-    echo $fwd_fastq_file $rev_fastq_file
     local base_name=$(basename "$fwd_fastq_file" _unknown_R1.fastq.gz)
     local unknown_dir="$RESULTS_DIR/unknown/${base_name}"
     local demultiplexed_dir="$RESULTS_DIR/demultiplexed/${base_name}"
@@ -66,12 +65,12 @@ trim_and_demultiplex_paired() {
              -G file:"$REV_PRIMER" \
              --trim-n -q 10 \
              --minimum-length 100 \
-             -o "${demultiplexed_dir}/{name}_R1.fastq.gz" \
-             -p "${demultiplexed_dir}/{name}_R2.fastq.gz" \
+             -o "${demultiplexed_dir}/{name}_${base_name}_R1.fastq.gz" \
+             -p "${demultiplexed_dir}/{name}_${base_name}_R2.fastq.gz" \
              -e ${allowed_errors} \
              --no-indels \
-             --untrimmed-output ${unknown_dir}/${sample_id}_unknown_R1.fastq.gz \
-             --untrimmed-paired-output ${unknown_dir}/${sample_id}_unknown_R2.fastq.gz \
+             --untrimmed-output ${unknown_dir}/${base_name}_unknown_R1.fastq.gz \
+             --untrimmed-paired-output ${unknown_dir}/${base_name}_unknown_R2.fastq.gz \
              -j $THREADS \
              --json "$primer_json_report" \
              --quiet \

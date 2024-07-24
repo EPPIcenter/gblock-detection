@@ -1,0 +1,279 @@
+PipelineVersion	v0.2.1
+ContainerEngine	docker
+Duration	1s
+CommandLine	nextflow run main.nf --readDIR /data/sequencing/spikeins_ix -profile docker --target v4 -w work/victoria_run --outDIR victoria_results
+CommitId	null
+Complete	2024-06-03T12:01:13.377477336-07:00
+ConfigFiles	/home/eppicenter/Documents/mad4hatter/nextflow.config
+Container	eppicenter/mad4hatter:latest
+ErrorMessage	SIGINT
+ErrorReport	SIGINT
+ExitStatus	null
+HomeDir	/home/eppicenter
+LaunchDir	/home/eppicenter/Documents/mad4hatter
+Manifest	nextflow.config.Manifest@52b891de
+Profile	docker
+ProjectDir	/home/eppicenter/Documents/mad4hatter
+Repository	null
+Resume	false
+Revision	null
+RunName	awesome_becquerel
+ScriptFile	/home/eppicenter/Documents/mad4hatter/main.nf
+ScriptId	d74333ebe62eb8cb7d2c13e411417a61
+ScriptName	main.nf
+SessionId	b7d5350f-856e-494a-8b57-84fd3713b475
+Start	2024-06-03T12:01:12.344610234-07:00
+StubRun	false
+Success	false
+UserName	eppicenter
+WorkDir	/home/eppicenter/Documents/mad4hatter/work/victoria_run
+NextflowBuild	5866
+NextflowTimestamp	15-04-2023 06:51 UTC
+NextflowVersion	23.04.1
+PipelineVersion	v0.2.1
+ContainerEngine	docker
+Duration	2.1s
+CommandLine	nextflow run main.nf --readDIR /data/sequencing/spikeins_ix -profile docker --target v4 -w work/victoria_run --outDIR victoria_results
+CommitId	null
+Complete	2024-06-03T12:01:28.146779908-07:00
+ConfigFiles	/home/eppicenter/Documents/mad4hatter/nextflow.config
+Container	eppicenter/mad4hatter:latest
+ErrorMessage	SIGINT
+ErrorReport	SIGINT
+ExitStatus	null
+HomeDir	/home/eppicenter
+LaunchDir	/home/eppicenter/Documents/mad4hatter
+Manifest	nextflow.config.Manifest@e890591
+Profile	docker
+ProjectDir	/home/eppicenter/Documents/mad4hatter
+Repository	null
+Resume	false
+Revision	null
+RunName	nasty_saha
+ScriptFile	/home/eppicenter/Documents/mad4hatter/main.nf
+ScriptId	d74333ebe62eb8cb7d2c13e411417a61
+ScriptName	main.nf
+SessionId	6fea74d5-7b7d-4a13-a34f-6b6fff3340aa
+Start	2024-06-03T12:01:26.067924389-07:00
+StubRun	false
+Success	false
+UserName	eppicenter
+WorkDir	/home/eppicenter/Documents/mad4hatter/work/victoria_run
+NextflowBuild	5866
+NextflowTimestamp	15-04-2023 06:51 UTC
+NextflowVersion	23.04.1
+PipelineVersion	v0.2.1
+ContainerEngine	docker
+Duration	2m 25s
+CommandLine	nextflow run main.nf --readDIR /data/sequencing/spikeins_ix -profile docker --target v4 -w work/victoria_run --outDIR victoria_results
+CommitId	null
+Complete	2024-06-03T12:07:53.683008241-07:00
+ConfigFiles	/home/eppicenter/Documents/mad4hatter/nextflow.config
+Container	eppicenter/mad4hatter:latest
+ErrorMessage	SIGINT
+ErrorReport	SIGINT
+ExitStatus	null
+HomeDir	/home/eppicenter
+LaunchDir	/home/eppicenter/Documents/mad4hatter
+Manifest	nextflow.config.Manifest@73e25780
+Profile	docker
+ProjectDir	/home/eppicenter/Documents/mad4hatter
+Repository	null
+Resume	false
+Revision	null
+RunName	lethal_mendel
+ScriptFile	/home/eppicenter/Documents/mad4hatter/main.nf
+ScriptId	eb641069108d8bf5381d26b75ae90ba3
+ScriptName	main.nf
+SessionId	5f6843c9-0ea9-455e-ba2c-15a26ce2e661
+Start	2024-06-03T12:05:28.857684447-07:00
+StubRun	false
+Success	false
+UserName	eppicenter
+WorkDir	/home/eppicenter/Documents/mad4hatter/work/victoria_run
+NextflowBuild	5866
+NextflowTimestamp	15-04-2023 06:51 UTC
+NextflowVersion	23.04.1
+PipelineVersion	v0.2.1
+ContainerEngine	docker
+Duration	6m 45s
+CommandLine	nextflow run main.nf --readDIR /data/sequencing/spikeins_ix -profile docker --target v4 -w work/victoria_run --outDIR victoria_results
+CommitId	null
+Complete	2024-06-03T12:15:24.084957013-07:00
+ConfigFiles	/home/eppicenter/Documents/mad4hatter/nextflow.config
+Container	eppicenter/mad4hatter:latest
+ErrorMessage	The following object is masked from ‘package:base’:
+
+    strsplit
+
+Loading required package: rtracklayer
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:Biostrings’:
+
+    collapse, intersect, setdiff, setequal, union
+
+The following object is masked from ‘package:XVector’:
+
+    slice
+
+The following objects are masked from ‘package:GenomicRanges’:
+
+    intersect, setdiff, union
+
+The following object is masked from ‘package:GenomeInfoDb’:
+
+    intersect
+
+The following objects are masked from ‘package:IRanges’:
+
+    collapse, desc, intersect, setdiff, slice, union
+
+The following objects are masked from ‘package:S4Vectors’:
+
+    first, intersect, rename, setdiff, setequal, union
+
+The following objects are masked from ‘package:BiocGenerics’:
+
+    combine, intersect, setdiff, union
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+Loading required package: iterators
+Loading required package: parallel
+Error in .Call2("fasta_index", filexp_list, nrec, skip, seek.first.rec,  : 
+  reading FASTA file PkPfPmPoPv.fasta: ">" expected at beginning of line 1
+Calls: <Anonymous> -> .read_XStringSet -> fasta.index -> .Call2
+Execution halted
+ErrorReport	Error executing process > 'DENOISE_AMPLICONS_2:PREPARE_REFERENCE_SEQUENCES:CREATE_REFERENCE_FROM_GENOMES'
+
+Caused by:
+  Process `DENOISE_AMPLICONS_2:PREPARE_REFERENCE_SEQUENCES:CREATE_REFERENCE_FROM_GENOMES` terminated with an error exit status (1)
+
+Command executed:
+
+  Rscript /home/eppicenter/Documents/mad4hatter/bin/create_reference_from_genomes.R     --ampliconFILE v4_amplicon_info.tsv     --genome PkPfPmPoPv.fasta     --output v4_reference.fasta     --ncores 8
+
+Command exit status:
+  1
+
+Command output:
+  (empty)
+
+Command error:
+  The following object is masked from ‘package:base’:
+  
+      strsplit
+  
+  Loading required package: rtracklayer
+  
+  Attaching package: ‘dplyr’
+  
+  The following objects are masked from ‘package:Biostrings’:
+  
+      collapse, intersect, setdiff, setequal, union
+  
+  The following object is masked from ‘package:XVector’:
+  
+      slice
+  
+  The following objects are masked from ‘package:GenomicRanges’:
+  
+      intersect, setdiff, union
+  
+  The following object is masked from ‘package:GenomeInfoDb’:
+  
+      intersect
+  
+  The following objects are masked from ‘package:IRanges’:
+  
+      collapse, desc, intersect, setdiff, slice, union
+  
+  The following objects are masked from ‘package:S4Vectors’:
+  
+      first, intersect, rename, setdiff, setequal, union
+  
+  The following objects are masked from ‘package:BiocGenerics’:
+  
+      combine, intersect, setdiff, union
+  
+  The following objects are masked from ‘package:stats’:
+  
+      filter, lag
+  
+  The following objects are masked from ‘package:base’:
+  
+      intersect, setdiff, setequal, union
+  
+  Loading required package: iterators
+  Loading required package: parallel
+  Error in .Call2("fasta_index", filexp_list, nrec, skip, seek.first.rec,  : 
+    reading FASTA file PkPfPmPoPv.fasta: ">" expected at beginning of line 1
+  Calls: <Anonymous> -> .read_XStringSet -> fasta.index -> .Call2
+  Execution halted
+
+Work dir:
+  /home/eppicenter/Documents/mad4hatter/work/victoria_run/63/18fdc1bf38d2669df3a7e41923fa8f
+
+Tip: view the complete command output by changing to the process work dir and entering the command `cat .command.out`
+ExitStatus	1
+HomeDir	/home/eppicenter
+LaunchDir	/home/eppicenter/Documents/mad4hatter
+Manifest	nextflow.config.Manifest@75784062
+Profile	docker
+ProjectDir	/home/eppicenter/Documents/mad4hatter
+Repository	null
+Resume	false
+Revision	null
+RunName	crazy_celsius
+ScriptFile	/home/eppicenter/Documents/mad4hatter/main.nf
+ScriptId	d74333ebe62eb8cb7d2c13e411417a61
+ScriptName	main.nf
+SessionId	b0be87eb-2bdf-428f-940a-3e45b5519a26
+Start	2024-06-03T12:08:39.212549325-07:00
+StubRun	false
+Success	false
+UserName	eppicenter
+WorkDir	/home/eppicenter/Documents/mad4hatter/work/victoria_run
+NextflowBuild	5866
+NextflowTimestamp	15-04-2023 06:51 UTC
+NextflowVersion	23.04.1
+PipelineVersion	v0.2.1
+ContainerEngine	docker
+Duration	54m 45s
+CommandLine	nextflow run main.nf --readDIR /data/sequencing/spikeins_ix -profile docker --target v4 -w work/victoria_run --outDIR victoria_results
+CommitId	null
+Complete	2024-06-03T14:05:19.990739859-07:00
+ConfigFiles	/home/eppicenter/Documents/mad4hatter/nextflow.config
+Container	eppicenter/mad4hatter:latest
+ErrorMessage	null
+ErrorReport	null
+ExitStatus	0
+HomeDir	/home/eppicenter
+LaunchDir	/home/eppicenter/Documents/mad4hatter
+Manifest	nextflow.config.Manifest@2568611c
+Profile	docker
+ProjectDir	/home/eppicenter/Documents/mad4hatter
+Repository	null
+Resume	false
+Revision	null
+RunName	spontaneous_hoover
+ScriptFile	/home/eppicenter/Documents/mad4hatter/main.nf
+ScriptId	d74333ebe62eb8cb7d2c13e411417a61
+ScriptName	main.nf
+SessionId	9e6da266-1f2d-4944-8656-62ac29a79d54
+Start	2024-06-03T13:10:34.557712716-07:00
+StubRun	false
+Success	true
+UserName	eppicenter
+WorkDir	/home/eppicenter/Documents/mad4hatter/work/victoria_run
+NextflowBuild	5866
+NextflowTimestamp	15-04-2023 06:51 UTC
+NextflowVersion	23.04.1

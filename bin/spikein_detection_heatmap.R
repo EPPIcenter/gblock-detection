@@ -24,10 +24,10 @@ melt_data <- function(counts_data) {
   counts_data$Count <- log10(counts_data$Count + 1)
 
   # Transform the data from long to wide format
-  wide_data <- dcast(counts_data, Sample ~ SpikeinID, value.var = "Count")
+  wide_data <- dcast(counts_data, SampleID ~ SpikeinID, value.var = "Count")
 
   # Melt the data for ggplot2
-  melted_data <- melt(wide_data, id.vars = "Sample")
+  melted_data <- melt(wide_data, id.vars = "SampleID")
 
   # Return melted data
   return (melted_data)
@@ -37,7 +37,7 @@ melt_data <- function(counts_data) {
 plot_spikein_detection_heatmap_by_sampleid <- function(melted_data) {
 
   # Generate the heatmap with a white background
-  g <- ggplot(melted_data, aes(x = variable, y = Sample, fill = value)) +
+  g <- ggplot(melted_data, aes(x = variable, y = SampleID, fill = value)) +
     geom_tile() +
     scale_fill_gradient(name = "Log10(Count + 1)", low = "blue", high = "red") + # Indicate log scale in legend
     labs(x = "Spike-in ID", y = "Sample", fill = "Count") +
@@ -51,7 +51,9 @@ plot_spikein_detection_heatmap_by_sampleid <- function(melted_data) {
 
 # Load the data
 counts_data <- args$input |> map_dfr(read.csv)
-print(counts_data)
+
+# Write concatenated file 
+write.csv(counts_data, file = "spikein_counts_data.csv", quote = FALSE, row.names = FALSE)
 validate_data(counts_data)
 melted_data <- melt_data(counts_data)
 

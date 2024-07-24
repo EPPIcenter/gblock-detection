@@ -1,10 +1,6 @@
 // Process for getting spikein counts
 process GET_SPIKEIN_COUNTS {
     tag "Getting Spikein Counts"
-    publishDir(
-        path: "${params.outDIR}",
-        mode: 'copy'
-    )
     label 'process_low'
 
     input:
@@ -13,7 +9,14 @@ process GET_SPIKEIN_COUNTS {
     path (demultiplexed_spikeins_fastqs)
 
     output:
-    path ('spikein_counts/final_spikein_counts.csv'), emit: spikein_counts
+    path ('spikein_counts/*_final_spikein_counts.csv'), emit: spikein_counts
+    path ('spikein_counts/*_multi_map_spikein_counts.csv'), emit: multimap
+
+    publishDir(
+        path: "${params.outDIR}/spikein_work",
+        mode: 'copy',
+        glob: '*.{txt,csv}'
+    )
 
     script:
     """

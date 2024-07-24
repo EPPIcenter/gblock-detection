@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     samtools \
     pandoc \
     jq \
+    flash \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python packages
@@ -37,9 +38,14 @@ RUN mkdir -p /usr/local/lib/R/etc/ /usr/lib/R/etc/ && \
 
 # Install R packages using Rscript
 RUN Rscript -e 'install.packages("remotes", version = "2.5.0")' && \
-    Rscript -e 'remotes::install_cran("tidyverse", upgrade="never", version = "2.0.0")' && \
-    Rscript -e 'remotes::install_cran("reshape2", upgrade="never", version="1.4.4")' && \
-    Rscript -e 'remotes::install_cran("argparse", upgrade="never", version="2.1.6")'
+    Rscript -e 'remotes::install_cran(c("tidyverse", "reshape2", "argparse", "ggbeeswarm", "gridExtra", "rmarkdown", "foreach", "doMC"), upgrade="never", version=c("2.0.0", "1.4.4", "2.1.6", "0.6.1", "2.3", "2.17", "1.5.2", "1.3.8"))'
+
+# Install Bioconductor Packages
+RUN Rscript -e 'if (!require("BiocManager", quietly = TRUE)) { install.packages("BiocManager"); }; BiocManager::install(version = "3.18");'
+
+RUN Rscript -e 'BiocManager::install("dada2", version = "3.18", ask = FALSE)'
+RUN Rscript -e 'BiocManager::install("muscle", version = "3.18", ask = FALSE)'
+RUN Rscript -e 'BiocManager::install("BSgenome", version = "3.18", ask = FALSE)'
 
 # Define default command to start bash
 CMD ["/bin/bash"]

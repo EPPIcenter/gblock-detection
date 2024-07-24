@@ -2,6 +2,8 @@ include { GET_SPIKEIN_COUNTS } from '../modules/local/get-spikein-counts.nf'
 include { PLOT_SPIKEIN_COUNTS } from '../modules/local/plot-spikein-counts.nf'
 include { SPIKEIN_TRIM } from '../modules/local/spikein-trim.nf'
 include { CREATE_PRIMER_FILES } from '../modules/local/create_primer_files.nf'
+include { ALIGN_TO_REFERENCE } from '../modules/local/align_to_reference.nf'
+include { CREATE_SPIKEIN_TABLE } from '../modules/local/create_spikein_table.nf'
 
 workflow SPIKEIN_ANALYSIS {
 
@@ -30,5 +32,17 @@ workflow SPIKEIN_ANALYSIS {
   // plot the spikein counts in a heatmap
   PLOT_SPIKEIN_COUNTS(
     GET_SPIKEIN_COUNTS.out.spikein_counts.collect()
+  )
+
+  // create a spikein table
+  CREATE_SPIKEIN_TABLE(
+    SPIKEIN_TRIM.out.spikeins_demultiplexed.collect()
+  )
+
+  // align against our known spikins
+  ALIGN_TO_REFERENCE(
+    CREATE_SPIKEIN_TABLE.out.spikein_data,
+    params.spikein_csv,
+    
   )
 }

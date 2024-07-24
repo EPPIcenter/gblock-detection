@@ -1,0 +1,661 @@
+---
+title: "Analysis"
+author: "Brian Palmer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(BSgenome)
+```
+
+```{r}
+spikein_counts_df <- read.table("~/Documents/GitHub/gblock-detection/results/stats/spikein_data.txt", header = T) %>%
+  group_by(SampleID) %>% 
+  top_n(1, Reads) %>%
+  mutate(SampleID = str_replace_all(SampleID, "_IX_.*$", "_IX")) %>%
+  mutate(Well = str_extract(SampleID, "(^[A-Z][0-9]+)_", group = 1)) %>%
+  group_by(SampleID, Well) %>%
+  reframe(SpikinReads = sum(Reads))
+
+pool5 <- read.table("pool_5.txt", header = F) %>% pull()
+
+species_loci = c('PmUG01_12_v1-1397996-1398245-1AB','PocGH01_12_v1-1106456-1106697-1AB','PvP01_12_v1-1184983-1185208-1AB')
+amplicons_df <- read.table("~/Documents/GitHub/gblock-detection/results/amplicon_coverage.txt", header = TRUE, sep = "\t") %>%
+  mutate(SampleID = str_replace_all(SampleID, "_IX_.*$", "_IX")) %>%
+  mutate(Well = str_extract(SampleID, "(^[A-Z][0-9]+)_", group = 1)) %>%
+  filter((grepl("-1A$", Locus) | Locus %in% pool5) & !(Locus %in% species_loci))
+
+dilutions_df <- read.csv("~/Documents/GitHub/gblock-detection/Spike-In_METADATA_IX.csv") %>%
+  select(
+    SampleID = Sample_name,
+    SIDilution = SI.Dilution,
+    SIPrimerDilution = SI.Primer.Dilution
+  ) %>%
+  mutate(Well = str_extract(SampleID, "(^[A-Z][0-9]+)_", group = 1))
+
+# read the sequences from the reference genome (already extracted into a fasta file)
+gblocks_df <- read.csv("~/Documents/GitHub/gblock-detection/resources/gblocks.csv")
+gblock_sequence <- gblocks_df %>%
+  filter(SpikeinID == "SDSI_01") %>%
+  mutate(GBlockSequence = str_remove(GBlockSequence, "^ACAGTTCTCCTTCTTAGCTTCGTGAGAAC")) %>%
+  mutate(GBlockSequence = str_remove(GBlockSequence, "CACATCATGTAGTAGACGACCAAGACAGT$")) %>%
+  pull(GBlockSequence)
+
+# The above we're joined previously to create this csv. The output
+# was saved. The script from before was lost due to CPU freeze.
+# joined_df <- read.csv("/home/bpalmer/Documents/SpikeIns-10_26_2023/metadata/output.csv")
+
+spikeins_df <- read.table("~/Documents/GitHub/gblock-detection/results/stats/spikein_data.txt", sep = "\t", header = T) %>%
+  mutate(SampleID = str_replace_all(SampleID, "_IX_.*$", "_IX")) %>%
+  mutate(Well = str_extract(SampleID, "(^[A-Z][0-9]+)_", group = 1))
+
+# Calculate the number of spikeins we found
+compute_spikein_summary <- function(spikeins_df, gblock_sequence, dilutions_df) {
+  
+  spikin_perfect_match_df <- spikeins_df %>%
+    filter(Spikein == !!gblock_sequence)
+  
+  spikein_no_match_df <- spikeins_df %>%
+    group_by(Well) %>%
+    filter(Spikein != !!gblock_sequence) %>%
+    reframe(
+      UnexpectedSeqCount = sum(Reads),
+    )
+    
+  spikin_perfect_match_df %>% 
+    left_join(spikein_no_match_df, by = c("Well")) %>%
+    left_join(dilutions_df %>% select(-SampleID), by = c("Well")) %>%
+    distinct(SampleID, SIDilution, SIPrimerDilution, Reads, UnexpectedSeqCount) %>%
+    mutate(ProportionPerfectMatch = Reads / (Reads + UnexpectedSeqCount))
+}
+
+spikein_summary_df <- compute_spikein_summary(spikeins_df, gblock_sequence, dilutions_df)
+spikein_summary_df[spikein_summary_df$SampleID == "BO1_110SI_110PR_042024_SI_IX", ]$SampleID = "B01_110SI_110PR_042024_SI_IX"
+spikein_summary_df[is.na(spikein_summary_df$UnexpectedSeqCount), ]$UnexpectedSeqCount = 0
+spikein_summary_df[is.na(spikein_summary_df$ProportionPerfectMatch), ]$ProportionPerfectMatch = 0
+spikein_summary_df <- spikein_summary_df %>%
+  filter(spikein_summary_df$SIDilution != "" & SIPrimerDilution != "") 
+
+write.csv(spikein_summary_df, file = "spikein_summary.csv", quote = F, row.names = F)
+```
+
+
+```{r}
+library(ggbeeswarm)
+library(patchwork)
+joined_df <- amplicons_df %>%
+  left_join(spikein_counts_df, by = c("Well", "SampleID")) %>%
+  left_join(dilutions_df %>% select(-SampleID), by = c("Well"))
+
+joined_df[joined_df$SampleID == "BO1_110SI_110PR_042024_SI_IX", ]$SampleID = "B01_110SI_110PR_042024_SI_IX"
+joined_df[joined_df$SampleID == "B01_110SI_110PR_042024_SI_IX", ]$Well = "B01"
+joined_df[is.na(joined_df)] <- 0
+
+# Function to sort dilutions by increasing dilution
+factorize_dilutions <- function(dilutions) {
+  convert_dilution_to_numeric <- function(dilution, delim = ':') {
+    if (grepl(delim, dilution)) {
+      parts <- strsplit(dilution, delim)[[1]]
+      return(as.numeric(parts[2]))
+    } else if (dilution == "0") {
+      return(0)
+    } else {
+      stop("Could not handle dilution during factorization!")
+    }
+  }
+  numeric_dilutions <- sapply(dilutions, convert_dilution_to_numeric)
+  sorted_dilutions <- dilutions[order(numeric_dilutions)]
+  factor(dilutions, levels = unique(sorted_dilutions))
+}
+
+joined_df$SIDilution <- factorize_dilutions(joined_df$SIDilution)
+joined_df$SIPrimerDilution <- factorize_dilutions(joined_df$SIPrimerDilution)
+
+# Create the Interaction without appending "(Pos)" or "(Neg)"
+joined_df <- joined_df %>%
+  mutate(Interaction = interaction(SIDilution, SIPrimerDilution, sep = " x ", lex.order = TRUE)) %>%
+  mutate(ControlType = if_else(grepl("Neg", SampleID), "Neg", "Pos"))
+
+# Save the levels and reorder after appending "(Pos)" and "(Neg)"
+interaction_levels <- levels(joined_df$Interaction)
+interaction_levels_pos <- paste0(interaction_levels, " (Pos)")
+interaction_levels_neg <- paste0(interaction_levels, " (Neg)")
+
+# Apply the labels to the Interaction column
+joined_df <- joined_df %>%
+  mutate(Interaction = sprintf("%s (%s)", Interaction, ControlType))
+
+# Combine the levels and set them to the factor
+combined_levels <- c(interaction_levels_pos, interaction_levels_neg)
+joined_df$Interaction <- factor(joined_df$Interaction, levels = combined_levels)
+
+# Continue with the rest of the data manipulation
+joined_df <- joined_df %>%
+  mutate(Reads = log1p(Reads), SpikinReads = log1p(SpikinReads)) %>%
+  group_by(Interaction) %>%
+  mutate(MeanSpikin = mean(SpikinReads)) %>%
+  ungroup()
+  
+replicate_df <- joined_df %>% 
+  distinct(SampleID, Interaction) %>%
+  group_by(Interaction) %>%
+  mutate(Replicate = as.factor(row_number()))
+
+joined_df <- joined_df %>%
+  left_join(replicate_df, by = c("SampleID", "Interaction"))
+
+abundances_plot <- ggplot(joined_df, aes(x = Interaction, y = Reads, fill = Replicate)) +
+  geom_quasirandom(dodge.width = 0.8, colour = "#56B4E9") +
+  theme_minimal() +
+  labs(
+    title = NULL,
+     x = "Interaction Groups (GBlock x Primer)",
+     y = "Reads (log1p)",
+     fill = element_blank(), subtitle = NULL
+  ) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  geom_point(aes(x = Interaction, y = SpikinReads), color = "red", size = 2, shape = 8, fill = "red") +
+  theme(legend.position="none")
+
+print(abundances_plot)
+
+x <- joined_df %>% 
+  group_by(Interaction, Well) %>%
+  reframe(Reads = sum(Reads))
+
+print(x)  
+
+output <- joined_df %>%
+  distinct(SampleID, SIDilution, SIPrimerDilution, ControlType) %>%
+  left_join(spikein_summary_df %>% select(SampleID, ExactMatchReads = Reads, UnexpectedSeqCount), by = c("SampleID")) %>%
+  mutate(ProportionCorrect = ExactMatchReads / (ExactMatchReads + UnexpectedSeqCount)) %>%
+  arrange(desc(ProportionCorrect))
+
+output[is.na(output)] <- 0
+write.csv(output, file = "spikin_counts.csv")     
+
+# "#56B4E9"
+sampleID_0_10 <- joined_df %>%
+  filter(Interaction == "0 x 1:10 (Pos)") %>%
+  distinct(SampleID)
+
+x <- spikein_counts_df %>% 
+  inner_join(sampleID_0_10, by = c("SampleID")) %>%
+  mutate(Log1pSpikinReads = log10(SpikinReads))
+
+spike_df <- read.table("~/Documents/GitHub/gblock-detection/results/stats/spikein_data.txt", header = T) %>%
+  group_by(SampleID) %>% 
+  top_n(1, Reads) %>%
+  mutate(SampleID = str_replace_all(SampleID, "_IX_.*$", "_IX")) %>%
+  inner_join(sampleID_0_10, by = c("SampleID"))
+
+hist(x$SpikinReads)
+
+write.csv(spike_df, file="spikins_in_0_x_1:10_(Pos).csv", quote=F, row.names=F)
+
+# spikein_summary_df$Interaction <- factor(spikein_summary_df$Interaction, levels = combined_levels)
+
+library(scales) # For the percent_format() function
+spikein_summary_df <- spikein_summary_df %>%
+  mutate(Interaction = interaction(SIDilution, SIPrimerDilution, sep = " x ", lex.order = TRUE)) %>%
+  mutate(ControlType = if_else(grepl("Neg", SampleID), "Neg", "Pos"))
+  
+# Save the levels and reorder after appending "(Pos)" and "(Neg)"
+interaction_levels <- levels(spikein_summary_df$Interaction)
+interaction_levels_pos <- paste0(interaction_levels, " (Pos)")
+interaction_levels_neg <- paste0(interaction_levels, " (Neg)")
+
+# Apply the labels to the Interaction column
+spikein_summary_df <- spikein_summary_df %>%
+  mutate(Interaction = sprintf("%s (%s)", Interaction, ControlType))
+
+# Combine the levels and set them to the factor
+combined_levels <- c(interaction_levels_pos, interaction_levels_neg)
+spikein_summary_df$Interaction <- factor(spikein_summary_df$Interaction, levels = combined_levels)
+
+# Calculate the total reads for each sample
+spikein_summary_df <- spikein_summary_df %>%
+  dplyr::mutate(TotalReads = Reads + UnexpectedSeqCount) %>%
+  dplyr::rename(PerfectMatchCount = Reads)
+
+# Calculate summary statistics for the plot
+summary_stats <- spikein_summary_df %>%
+  group_by(Interaction) %>%
+  summarise(TotalReads = sum(TotalReads))
+
+# Plot using ggplot2
+ggplot(spikein_summary_df, aes(x = Interaction, y = ProportionPerfectMatch)) +
+  geom_boxplot() +
+  scale_y_continuous(labels = percent_format(), limits=c(0,1)) +
+  theme_minimal() +
+  labs(title = "Proportion of Spike-ins that Matched SDSI01 Exactly",
+       x = "Interaction Groups (GBlock x Primer)",
+       y = "Proportion Exact Match (%)",
+       fill = element_blank()
+  ) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  geom_text(data = summary_stats, aes(x = Interaction, y = 1.05, label = paste0("Total Reads: ", comma(TotalReads))),
+            color = "blue", size = 3, angle = 90, vjust = 0.5, hjust = 1)
+```
+
+
+```{r}
+# Convert necessary columns to factors
+joined_df$SIDilution <- as.factor(joined_df$SIDilution)
+joined_df$SIPrimerDilution <- as.factor(joined_df$SIPrimerDilution)
+joined_df$Locus <- as.factor(joined_df$Locus)
+```
+
+## Upfront EDA
+
+### Look at the distribution of reads per amplicon
+
+We are getting reads pretty consistently across the primer dilutions in the different spikein groups. The next step would be to look at the amplicons closely to see if there are fluctuations across groups. 
+
+Looks like the spikeins are also appearing, particularly when the primer dilution group approaches 100.
+
+## Look at the different groups to see if we're getting odd allele counts
+
+```{r}
+alleledata_df <- read.table("mad4hatter-runs/victoria_results_2024_06_03/allele_data.txt", sep = "\t", header = TRUE) %>%
+  mutate(Well = str_extract(SampleID, "(^[A-Z][0-9]+)_", group = 1)) %>%
+  select(-SampleID)
+
+unfiltered_alleledata_joined_df <- joined_df %>%
+  select(Well, Locus, SpikinReads, SIDilution,SIPrimerDilution, Interaction, ControlType, MeanSpikin, Replicate) %>%
+  left_join(alleledata_df, by = join_by(Well, Locus)) %>%
+  mutate(Well = as.factor(Well))
+
+# Filter to keep only the allele with the highest read count per locus per well
+top_allele_per_locus_well <- unfiltered_alleledata_joined_df %>%
+  group_by(Well, Locus) %>%
+  slice_max(order_by = Reads, n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+# Join the original data frame with the filtered top alleles data frame
+alleledata_joined_df <- unfiltered_alleledata_joined_df %>%
+  # Perform a semi join, which filters rows in the first table to those that have matches in the second table
+  semi_join(top_allele_per_locus_well, by = c("Well", "Locus", "ASV", "Reads"))
+
+alleledata_joined_df[is.na(alleledata_joined_df$Reads), ]$Reads <- 0
+alleledata_joined_df <- alleledata_joined_df %>%
+  filter(Reads == 0 | Reads >= 10)
+
+
+```
+
+
+```{r}
+library(dplyr)
+library(purrr)
+library(patchwork)
+library(viridis)
+
+# Function to calculate TP, FP, FN
+calculate_metrics_with_pseudocigar <- function(control, experiment) {
+  
+  results_list <- list()
+  missing_asvs <- list()
+
+  unique_experiment_wells <- unique(experiment$Well)
+  
+  for (exp_well in unique_experiment_wells) {
+      experiment_well_df <- filter(experiment, Well == exp_well)
+  
+      # Join with control
+      full_data <- full_join(control, experiment_well_df, by = c("Locus", "PseudoCIGAR"), suffix = c("_ctrl", "_exp"))
+      full_data[is.na(full_data$Reads_ctrl),]$Reads_ctrl <- 0
+      full_data[is.na(full_data$Reads_exp),]$Reads_exp <- 0
+      
+      stats_df <- full_data %>%
+        group_by(Locus, PseudoCIGAR) %>%
+        reframe(
+          FP = sum(!is.na(Well_exp) & is.na(Well_ctrl)),
+          FN = sum(is.na(Well_exp) & !is.na(Well_ctrl)),
+          TP = sum(!is.na(Well_exp) & !is.na(Well_ctrl))
+        ) %>%
+        mutate(Well_exp := !! exp_well)
+
+      results_list[[exp_well]] <- stats_df
+  
+      # Record missing ASVs
+      missing_data <- full_data %>%
+        filter(is.na(Well_exp) & !is.na(Well_ctrl)) %>%
+        select(Locus, PseudoCIGAR, Reads_ctrl) %>%
+        filter(!is.na(PseudoCIGAR))
+      
+      missing_data$Well_exp <- exp_well
+      missing_asvs[[exp_well]] <- missing_data
+  }
+  
+  stats_final_df <- bind_rows(results_list) %>%
+    group_by(Well_exp) %>%
+    summarise(
+      Precision = sum(TP) / (sum(TP) + sum(FP)),
+      Recall = sum(TP) / (sum(TP) + sum(FN)),
+      .groups = 'drop'
+    )
+  
+  missing_asvs_df <- bind_rows(missing_asvs) %>%
+      group_by(Well_exp) %>%
+      nest(Data = c(Locus, PseudoCIGAR, Reads_ctrl))
+
+  # Combine summary metrics with missing ASV details
+  final_results_df <- left_join(stats_final_df, missing_asvs_df, by = join_by(Well_exp))
+  
+  final_results_df
+}
+
+# Function to calculate TP, FP, FN
+calculate_fn_details <- function(control, experiment) {
+  
+  unique_experiment_wells <- unique(experiment$Well)
+  results_list <- list()
+  
+  for (exp_well in unique_experiment_wells) {
+    
+    experiment_well_df <- experiment %>% 
+      filter(Well == exp_well)
+  
+    full_data <- full_join(control, experiment_well_df, by = c("Locus", "PseudoCIGAR"), suffix = c("_ctrl", "_exp"))
+    
+    full_data[is.na(full_data$Reads_ctrl), ]$Reads_ctrl <- 0
+    full_data[is.na(full_data$Reads_exp), ]$Reads_exp <- 0
+    
+    # Calculate additional details for False Negatives
+    fn_details <- full_data %>%
+      filter(is.na(Well_exp) & !is.na(Well_ctrl)) %>%
+      mutate(Well_exp = exp_well) %>%
+      select(Well_exp, Locus, PseudoCIGAR, FN_ASV = ASV_ctrl, FN_Reads = Reads_ctrl)
+
+    results_list[[exp_well]] <- fn_details
+  }
+  
+  fn_final_df <- bind_rows(results_list)
+
+  return (fn_final_df)
+}
+
+# Prepare the control group data
+control_data <- alleledata_joined_df %>%
+  filter(Interaction == "0 x 0 (Pos)") %>%
+  select(Well = Well, Locus, ASV, PseudoCIGAR, Reads)
+
+# Prepare experimental groups dynamically
+interaction_types <- setdiff(unique(alleledata_joined_df$Interaction), "0 x 0 (Pos)")
+# results_list <- list()
+results_list_with_pseudocigar <- list()
+fn_details <- list()
+
+# Iterate over each interaction type to calculate metrics
+for (interaction in interaction_types) {
+  experiment_data <- alleledata_joined_df %>%
+    filter(Interaction == interaction) %>%
+    select(Well = Well, Locus, ASV, PseudoCIGAR, Reads)
+  
+  results <- calculate_metrics_with_pseudocigar(control_data, experiment_data)
+  results$Interaction <- interaction
+  results_list_with_pseudocigar[[interaction]] <- results
+  
+  results <- calculate_fn_details(control_data, experiment_data)
+  results$Interaction <- interaction
+  fn_details[[interaction]] <- results
+}
+
+# Combine all results into a single dataframe
+# final_results <- bind_rows(results_list)
+final_results_with_pseudocigar <- bind_rows(results_list_with_pseudocigar)
+final_fn_details <- bind_rows(fn_details)
+
+# Print the final results
+# print(final_results)
+print(final_results_with_pseudocigar)
+
+interaction_groups_df <- spikein_summary_df %>%
+  distinct(Interaction, ControlType)
+
+# final_results_df <- final_results %>%
+#   left_join(interaction_groups_df, by = join_by(Interaction))
+
+final_results_with_pseudocigar_df <- final_results_with_pseudocigar %>%
+  left_join(interaction_groups_df, by = join_by(Interaction))
+
+# ggplot(final_results_df, aes(x = Precision, y = Recall)) +
+#   geom_point(aes(color = Interaction, shape = ControlType), size = 6) +
+#   scale_color_discrete(guide = guide_legend(ncol = 2, title = "Interaction")) +
+#   scale_shape_discrete(guide = guide_legend(ncol = 2, title = "Control Type"))
+
+final_results_with_pseudocigar_df$Interaction <- factor(final_results_with_pseudocigar_df$Interaction, levels = levels(joined_df$Interaction))
+
+# Number of interaction groups
+num_interactions <- length(unique(final_results_with_pseudocigar_df$Interaction))
+
+# Generate colors from viridis
+colors <- viridis::viridis_pal(option = "viridis")(num_interactions)
+
+# Create the plot with manually set viridis colors
+ggplot(final_results_with_pseudocigar_df, aes(x = Precision, y = Recall)) +
+  geom_point(aes(color = Interaction, shape = ControlType), size = 6) +
+  scale_color_manual(values = colors, guide = guide_legend(ncol = 2, title = "Interaction")) +  # Manually set viridis colors
+  scale_shape_discrete(guide = guide_legend(ncol = 2, title = "Control Type")) +
+  labs(
+    title = "Precision and Recall of interaction groups compared to 0 x 0 (Pos)"
+  ) +
+  theme_minimal()
+
+# Assuming final_results_with_pseudocigar_df has columns for Precision, Recall, Interaction, ControlType
+reshaped_df <- final_results_with_pseudocigar_df %>%
+  pivot_longer(
+    cols = c("Precision", "Recall"),  # Columns to make longer
+    names_to = "Metric",              # New column for old column names
+    values_to = "Value"               # New column for values
+  ) %>%
+  mutate(Interaction = factor(Interaction, levels = combined_levels))
+
+# View the reshaped dataframe to confirm it looks correct
+print(reshaped_df)
+
+
+# Create the plot with dodged box plots for Precision and Recall
+combined_plot <- ggplot(reshaped_df, aes(x = Interaction, y = Value, fill = Metric)) +
+  geom_boxplot(position = position_dodge(width = 0.75), alpha = 0.5) +  # Dodge the box plots
+  labs(
+    x = "Interaction Groups (GBlock x Primer)",
+    y = "Metric Value",
+    fill = "Metric"  # Label for the legend indicating Metric types
+  ) +
+  scale_fill_manual(values = c("Precision" = "blue", "Recall" = "red")) +  # Manual color assignment
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "right"
+  )
+
+print(combined_plot)
+
+
+final_fn_details <- final_fn_details %>%
+  mutate(Interaction = factor(Interaction, levels = combined_levels)) %>%
+  mutate(FN_reads_log1p = log10(FN_Reads))
+
+# Plotting FN_Reads across Interaction groups
+fn_reads_plot <- ggplot(final_fn_details, aes(x = Interaction, y = FN_reads_log1p)) +
+  geom_boxplot(outlier.color = "red", outlier.shape = 1) +  # Display outliers in red
+  labs(title = "Distribution of False Negative Reads by Interaction Group",
+       x = "Interaction Group",
+       y = "False Negative Reads (log10)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "right"
+  )
+
+# Print the plot
+print(fn_reads_plot)
+
+```
+
+```{r}
+calculate_metrics_with_asv <- function(control, experiment) {
+    results_list <- list()
+    missing_asvs <- list()
+  
+    unique_experiment_wells <- unique(experiment$Well)
+    
+    for (exp_well in unique_experiment_wells) {
+        experiment_well_df <- filter(experiment, Well == exp_well)
+    
+        # Join with control
+        full_data <- full_join(control, experiment_well_df, by = c("Locus", "ASV"), suffix = c("_ctrl", "_exp"))
+        full_data[is.na(full_data$Reads_ctrl),]$Reads_ctrl <- 0
+        full_data[is.na(full_data$Reads_exp),]$Reads_exp <- 0
+        
+        stats_df <- full_data %>%
+          group_by(Locus, ASV) %>%
+          reframe(
+            FP = sum(!is.na(Well_exp) & is.na(Well_ctrl)),
+            FN = sum(is.na(Well_exp) & !is.na(Well_ctrl)),
+            TP = sum(!is.na(Well_exp) & !is.na(Well_ctrl))
+          ) %>%
+          mutate(Well_exp := !! exp_well)
+
+        results_list[[exp_well]] <- stats_df
+    
+        # Record missing ASVs
+        missing_data <- full_data %>%
+          filter(is.na(Well_exp) & !is.na(Well_ctrl)) %>%
+          select(Locus, ASV, Reads_ctrl) %>%
+          filter(!is.na(ASV))
+        
+        missing_data$Well_exp <- exp_well
+        missing_asvs[[exp_well]] <- missing_data
+    }
+    
+    stats_final_df <- bind_rows(results_list) %>%
+      group_by(Well_exp) %>%
+      summarise(
+        Precision = sum(TP) / (sum(TP) + sum(FP)),
+        Recall = sum(TP) / (sum(TP) + sum(FN)),
+        .groups = 'drop'
+      )
+    
+    missing_asvs_df <- bind_rows(missing_asvs) %>%
+        group_by(Well_exp) %>%
+        nest(Data = c(Locus, ASV, Reads_ctrl))
+
+    # Combine summary metrics with missing ASV details
+    final_results_df <- left_join(stats_final_df, missing_asvs_df, by = join_by(Well_exp))
+    
+    final_results_df
+}
+
+new.truths <- read.csv("../resources/new_truths.csv")
+
+w2_truths_df <- new.truths %>%
+  filter(strain == "W2") %>%
+  distinct(Locus = locus, ASV = true_allele, Reads = reads) %>%
+  mutate(Well = "00") %>%
+  filter((grepl("-1A$", Locus) | Locus %in% pool5) & !(Locus %in% species_loci)) %>%
+  group_by(Well, Locus) %>%
+  slice_max(order_by = Reads, n = 1, with_ties = FALSE) %>%
+  ungroup()
+  
+
+# Iterate over each interaction type to calculate metrics
+experiment_data <- alleledata_joined_df %>%
+  filter(Interaction == "0 x 0 (Pos)") %>%
+  select(Well = Well, Locus, ASV, PseudoCIGAR, Reads)
+
+results <- calculate_metrics_with_asv(w2_truths_df, experiment_data)
+print(results)
+```
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+# Combine all the ASV data into one dataframe
+all_asvs <- bind_rows(lapply(results$Data, function(df) {
+    transmute(df, Locus, ASV)
+}), .id = "Group")
+
+# Count occurrences of each ASV at each locus
+asv_counts <- all_asvs %>%
+    group_by(Locus, ASV) %>%
+    summarise(Count = n_distinct(Group), .groups = 'drop')
+
+print(asv_counts)
+
+write.csv(asv_counts, file = "asvs_missing_from_controls.csv", quote = F, row.names = F)
+
+
+# ASVs appearing in all groups
+asvs_in_all_groups <- filter(asv_counts, Count == n_distinct(all_asvs$Group))
+
+print(asvs_in_all_groups)
+```
+
+6 ASVs were found to be missing in all wells. This is partially due to the Ns in the ASVs. Using PseudoCIGARs could be better but we don't have them at the moment for this dataset. From these 6, 2 of then had Ns in them (it's an old dataset.)
+
+3 ASVs were missing from just 1 well each.
+
+1 ASV was missing from 3 wells
+
+Picked B08 to compare the groups of interest.
+
+```{r}
+control_data <- alleledata_joined_df %>%
+  filter(Interaction == "0 x 0 (Pos)" & Well == "B08") %>%
+  select(Well = Well, Locus, ASV, PseudoCIGAR, Reads)
+
+results_list_with_asv <- list()
+fn_details <- list()
+
+selected_interactions <- c("1:1 x 1:250 (Pos)", "1:10 x 1:250 (Pos)")
+
+# Iterate over each interaction type to calculate metrics
+for (interaction in selected_interactions) {
+  experiment_data <- alleledata_joined_df %>%
+    filter(Interaction == interaction) %>%
+    select(Well = Well, Locus, ASV, PseudoCIGAR, Reads)
+
+  results <- calculate_metrics_with_pseudocigar(control_data, experiment_data)
+  results$Interaction <- interaction
+  results_list_with_asv[[interaction]] <- results
+}
+
+# Combine all results into a single dataframe
+# final_results <- bind_rows(results_list)
+final_results_with_asv <- bind_rows(results_list_with_asv)
+
+print(final_results_with_asv)
+
+# Combine all the ASV data into one dataframe
+all_asvs <- bind_rows(lapply(final_results_with_asv$Data, function(df) {
+    transmute(df, Locus, ASV)
+}), .id = "Group")
+
+# Count occurrences of each ASV at each locus
+asv_counts <- all_asvs %>%
+    group_by(Locus, ASV) %>%
+    summarise(Count = n_distinct(Group), .groups = 'drop') %>%
+  distinct()
+
+print(asv_counts)
+
+# ASVs appearing in all groups
+asvs_in_all_groups <- filter(asv_counts, Count == n_distinct(all_asvs$Group))
+
+print(asvs_in_all_groups)
+
+```
+
+
+In summary:
+1. I should probably find a better way to compare control replicates. Comparing against the truth set is working (sorta), there is just clearly ASVs in the truth that are incorrect.
+2. Just using a single control replicate as the truth (since they otherwise seem similar in value), used B03 because it had the best recall (albeit, this was against the W2 control that seems bad). 
+3. For the groups of interest, we have 0.995 recall or better

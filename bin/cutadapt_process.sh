@@ -76,14 +76,13 @@ no_adapter_dimers="no_adapter_dimers"
 test -d $no_adapter_dimers || mkdir -p $no_adapter_dimers
 
 # cutadapt_json=$(mktemp)
+cutadapt_json="cutadapt.json"
 
 # Delete the directories on exit if specified on the command line
 trap "rm -rf '$adapter_dimers' '$no_adapter_dimers'" EXIT
 
 # get the sample id
 sample_id=$(basename "$forward_read" | sed 's/_R[12].*//')
-test -d cutadapt || mkdir -p cutadapt
-cutadapt_json="cutadapt/${sample_id}_sample_cutadapt.json"
 
 # Remove all adapter dimers
 cutadapt \
@@ -117,8 +116,6 @@ else
     qualfilter="--nextseq-trim=20"
 fi
 
-cutadapt_json="cutadapt/${sample_id}_amplicon_cutadapt.json"
-
 cutadapt \
     --action=trim \
     -g file:${fwd_primers_file} \
@@ -138,8 +135,35 @@ cutadapt \
     ${no_adapter_dimers}/${sample_id}_filtered_R1.fastq.gz \
     ${no_adapter_dimers}/${sample_id}_filtered_R2.fastq.gz > /dev/null
 
-amplicons=$(jq '.read_counts.read1_with_adapter' ${cutadapt_json})
-printf "%s\t%s\n" "Amplicons" ${amplicons} >> ${sample_id}.SAMPLEsummary.txt
 
-# Get amplicons specific reads
-jq -r '.adapters_read1[] | [.name, .total_matches] | @tsv' ${cutadapt_json} > ${sample_id}.AMPLICONsummary.txt
+# Count reads in each demultiplexed fastq file using zgrep
+amplicon_counts=${sample_id}.AMPLICONsummary.txt
+sample_counts=${sample_id}.SAMPLEsummary.txt
+total_count=0
+
+touch $amplicon_counts $sample_counts
+
+while read -r amplicon_name; do
+    fastq_file="${trimmed_demuxed_fastqs}/${amplicon_name}_${sample_id}_trimmed_R1.fastq.gz"
+    if [[ -f $fastq_file ]]; then
+        read_count=$(zgrep -c ^@ $fastq_file) || zgrep_exit_status=$?
+        zgrep_exit_status=${zgrep_exit_status:-0}
+        if [[ $zgrep_exit_status -eq 1 ]]; then
+            read_count=0
+        elif [[ $zgrep_exit_status -ne 0 ]]; then
+            echo "Error: could not calculate amplicons for $fastq_file"
+            exit $zgrep_exit_status
+        fi
+    else
+        read_count=0
+    fi
+
+    total_count=$((total_count + read_count))
+    echo -e "${amplicon_name}\t${read_count}" >> $amplicon_counts
+    
+    # unset the status variable
+    unset zgrep_exit_status
+
+done < <(grep '^>' $fwd_primers_file | sed 's/^>//')
+
+printf "%s\t%s\n" "Amplicons" ${total_count} >> ${sample_counts}

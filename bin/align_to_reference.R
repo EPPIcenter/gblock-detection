@@ -24,12 +24,12 @@ library(Biostrings)
 library(magrittr)
 
 ## FOR DEUBGING
-setwd("/home/eppicenter/Desktop")
-args=list()
-args$clusters="spikeins_data.txt"
-args$refseq_csv="spikeins.csv"
-args$parallel=TRUE
-args$n_cores=2
+# setwd("/home/eppicenter/Desktop")
+# args=list()
+# args$clusters="spikeins_data.txt"
+# args$refseq_csv="spikeins.csv"
+# args$parallel=TRUE
+# args$n_cores=2
 
 clusters=read.table(args$clusters, header=T)
 

@@ -28,7 +28,6 @@ process CUTADAPT {
   path("*.AMPLICONsummary.txt"), emit: amplicon_summary
   path('demuliplexed_fastqs'), emit: demultiplexed_fastqs
   path('trimmed_demuxed_unknown_fastqs'), emit: unknown_fastqs
-  path('cutadapt/*.json'), emit: cutadapt_json
 
   script:
   """

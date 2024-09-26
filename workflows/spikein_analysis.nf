@@ -39,10 +39,12 @@ workflow SPIKEIN_ANALYSIS {
     SPIKEIN_TRIM.out.spikeins_demultiplexed.collect()
   )
 
-  // align against our known spikins
-  ALIGN_TO_REFERENCE(
-    CREATE_SPIKEIN_TABLE.out.spikein_data,
-    params.spikein_csv,
-    
-  )
+  if (params.should_align_to_reference) {
+    // align against our known spikins
+    ALIGN_TO_REFERENCE(
+      CREATE_SPIKEIN_TABLE.out.spikein_data,
+      params.spikein_csv,
+      
+    )
+  }
 }

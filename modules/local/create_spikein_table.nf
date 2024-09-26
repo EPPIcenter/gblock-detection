@@ -11,7 +11,7 @@ process CREATE_SPIKEIN_TABLE {
   path spikein_fastas
   
   output:
-  path("spikein_data.txt"), emit: spikein_data
+  path("spikeins_data.txt"), emit: spikein_data
 
   publishDir(
     path: "${params.outDIR}/stats",

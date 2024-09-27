@@ -3,83 +3,158 @@ title: "Analysis"
 author: "Brian Palmer"
 date: "`r Sys.Date()`"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(BSgenome)
+setwd("/home/bpalmer/Documents/GitHub/gblock-detection/analysis")
 ```
 
 ```{r}
-spikein_counts_df <- read.table("~/Documents/GitHub/gblock-detection/results/stats/spikein_data.txt", header = T) %>%
-  group_by(SampleID) %>% 
-  top_n(1, Reads) %>%
-  mutate(SampleID = str_replace_all(SampleID, "_IX_.*$", "_IX")) %>%
-  mutate(Well = str_extract(SampleID, "(^[A-Z][0-9]+)_", group = 1)) %>%
-  group_by(SampleID, Well) %>%
-  reframe(SpikinReads = sum(Reads))
+spikein_counts_df <- read_delim("~/Documents/GitHub/gblock-detection/spikeins_xi_results/stats/spikeins_data.txt") %>%
+  group_by(SampleID) %>%
+  # Remove unnecessary parts and extract Well and SDSI
+  mutate(
+    Well = str_extract(SampleID, "(^.*-[A-Z][0-9]+)-", group = 1),
+    Well = str_replace(Well, "(SDSI[0-9]-|negcontrol-|original-|SDSI[0-9]_[0-9]-|SDSI[0-9]_[0-9]_[0-9]-|SDSI[0-9],[0-9]-|SDSI[0-9],[0-9],[0-9]-)", ""),
+    SDSI = str_extract(SampleID, "SDSI[0-9](_[0-9])*"),
+    SDSI = str_replace_all(SDSI, "_", ","), # Convert underscores to commas for separation
+    Spikeins = str_split(SDSI, ",") # Split into individual Spikeins
+  ) %>%
+  unnest(Spikeins) %>%  # Create separate rows for each Spikein
+  mutate(
+    Spikeins = ifelse(grepl("^[0-9]+$", Spikeins), paste0("SDSI", Spikeins), Spikeins) # Add "SDSI" prefix to numeric Spikeins
+  ) %>%
+  ungroup()
+
+# spikein_counts_df <- read_delim("~/Documents/GitHub/gblock-detection/spikeins_xi_results/stats/spikeins_data.txt")
+# # print(spikein_counts_df, n = 100)
 
 pool5 <- read.table("pool_5.txt", header = F) %>% pull()
 
 species_loci = c('PmUG01_12_v1-1397996-1398245-1AB','PocGH01_12_v1-1106456-1106697-1AB','PvP01_12_v1-1184983-1185208-1AB')
-amplicons_df <- read.table("~/Documents/GitHub/gblock-detection/results/amplicon_coverage.txt", header = TRUE, sep = "\t") %>%
-  mutate(SampleID = str_replace_all(SampleID, "_IX_.*$", "_IX")) %>%
-  mutate(Well = str_extract(SampleID, "(^[A-Z][0-9]+)_", group = 1)) %>%
-  filter((grepl("-1A$", Locus) | Locus %in% pool5) & !(Locus %in% species_loci))
+amplicons_df <- read_delim("~/Documents/GitHub/gblock-detection/spikeins_xi_results/amplicon_coverage.txt") %>%
+  # mutate(SampleID = str_replace_all(SampleID, "_S[0-9]+_L005$", "")) %>% # results ix
+  # mutate(Well = str_extract(SampleID, "(^[A-Z][0-9]+)-", group = 1)) %>% # results ix
+  mutate(Well = str_extract(SampleID, "(^.*-[A-Z][0-9]+)-", group = 1)) %>% # results xi
+  mutate(Well = str_replace(Well, "(SDSI[0-9]-|negcontrol-|original-|SDSI[0-9]_[0-9]-|SDSI[0-9]_[0-9]_[0-9]-)", "")) %>% # resultx xi
+  filter((grepl("-1A$", Locus) | Locus %in% pool5) & !(Locus %in% species_loci)) # results xi
 
-dilutions_df <- read.csv("~/Documents/GitHub/gblock-detection/Spike-In_METADATA_IX.csv") %>%
+metadata_df <-  read_csv("~/Documents/GitHub/gblock-detection/spikein_xi_metadata.csv")
+dilutions_df <- metadata_df %>%
   select(
-    SampleID = Sample_name,
-    SIDilution = SI.Dilution,
-    SIPrimerDilution = SI.Primer.Dilution
+    SampleID = `Sample name for sequencing`,
+    Density = `parasite_density`
   ) %>%
-  mutate(Well = str_extract(SampleID, "(^[A-Z][0-9]+)_", group = 1))
+  mutate(
+    SIDilution = ifelse(Density > 0 & !grepl("original", SampleID), "1:10", "0"),
+    SIPrimerDilution = ifelse(Density > 0 & !grepl("original", SampleID), "1:250", "0"),
+    # Well = str_extract(SampleID, "(^[A-Z][0-9]+)-", group = 1),
+    Well = str_extract(SampleID, "(^.*-[A-Z][0-9]+)-", group = 1), # results xi
+    Well = str_replace(Well, "(SDSI[0-9]-|negcontrol-|original-|SDSI[0-9]_[0-9]-|SDSI[0-9]_[0-9]_[0-9]-|SDSI[0-9],[0-9]-|SDSI[0-9],[0-9],[0-9]-)", ""), # resultx xi
+    # Density = factor(Density, levels = c("H2O", "100", "1000"))
+  )
 
 # read the sequences from the reference genome (already extracted into a fasta file)
-gblocks_df <- read.csv("~/Documents/GitHub/gblock-detection/resources/gblocks.csv")
+gblocks_df <- read_csv("~/Documents/GitHub/gblock-detection/resources/gblocks.csv")
 gblock_sequence <- gblocks_df %>%
-  filter(SpikeinID == "SDSI_01") %>%
   mutate(GBlockSequence = str_remove(GBlockSequence, "^ACAGTTCTCCTTCTTAGCTTCGTGAGAAC")) %>%
   mutate(GBlockSequence = str_remove(GBlockSequence, "CACATCATGTAGTAGACGACCAAGACAGT$")) %>%
-  pull(GBlockSequence)
+  mutate(GBlockSequence = substr(GBlockSequence, 2, nchar(GBlockSequence) - 1)) %>% # Remove 1st and last base
+  
+  # Extract the numeric part from SpikeinID and store it in 'number'
+  mutate(number = str_extract(SpikeinID, "[0-9]+")) %>% 
+  
+  # Optionally modify the SpikeinID, if needed
+  mutate(SpikeinID = sprintf("SDSI%d", as.numeric(number)))
+  # pull(GBlockSequence)
 
 # The above we're joined previously to create this csv. The output
 # was saved. The script from before was lost due to CPU freeze.
 # joined_df <- read.csv("/home/bpalmer/Documents/SpikeIns-10_26_2023/metadata/output.csv")
 
-spikeins_df <- read.table("~/Documents/GitHub/gblock-detection/results/stats/spikein_data.txt", sep = "\t", header = T) %>%
-  mutate(SampleID = str_replace_all(SampleID, "_IX_.*$", "_IX")) %>%
-  mutate(Well = str_extract(SampleID, "(^[A-Z][0-9]+)_", group = 1))
+# spikeins_df <- read_table("~/Documents/GitHub/gblock-detection/spikeins_xi_results/stats/spikeins_data.txt") %>%
+#   # mutate(SampleID = str_replace_all(SampleID, "_S[0-9]+_L005$", "")) %>%
+#   mutate(
+#     Well = str_extract(SampleID, "(^.*-[A-Z][0-9]+)-", group = 1), # results xi
+#     Well = str_replace(Well, "(SDSI[0-9]-|negcontrol-|original-|SDSI[0-9]_[0-9]-|SDSI[0-9]_[0-9]_[0-9]-|SDSI[0-9],[0-9]-|SDSI[0-9],[0-9],[0-9]-)", "")) # resultx xi
+# 
+# write.csv(spikeins_df, file = "spikein_input.csv", quote = F, row.names = F)
 
-# Calculate the number of spikeins we found
-compute_spikein_summary <- function(spikeins_df, gblock_sequence, dilutions_df) {
+
+
+
+
+# Function to compute Spikein Summary with spikein count in GBlockSequence
+compute_spikein_summary <- function(spikein_counts_df, gblock_sequence, dilutions_df) {
   
-  spikin_perfect_match_df <- spikeins_df %>%
-    filter(Spikein == !!gblock_sequence)
-  
-  spikein_no_match_df <- spikeins_df %>%
-    group_by(Well) %>%
-    filter(Spikein != !!gblock_sequence) %>%
-    reframe(
-      UnexpectedSeqCount = sum(Reads),
-    )
+  # Join gblock_sequence data with the spikein counts data on Spikeins
+  spikin_perfect_match_df <- spikein_counts_df %>%
+    left_join(gblock_sequence, by = c("Spikeins" = "SpikeinID")) %>%
     
-  spikin_perfect_match_df %>% 
-    left_join(spikein_no_match_df, by = c("Well")) %>%
-    left_join(dilutions_df %>% select(-SampleID), by = c("Well")) %>%
+    # For each sample, calculate the exact reads matching a GBlockSequence
+    rowwise() %>%
+    mutate(
+      SpikeinReadsExact = sum(Spikein == GBlockSequence), # Detect if the spikein matches the GBlockSequence
+
+      # SpikeinReadsExact = ifelse(str_detect(Spikein, GBlockSequence), Reads, 0) # Detect if the spikein matches the GBlockSequence
+    ) %>%
+    ungroup() %>%
+    
+    # Group by relevant fields and sum the exact match reads for each sample
+    group_by(SampleID, Well, Spikeins) %>%
+    summarise(SpikeinReadsExact = sum(SpikeinReadsExact, na.rm = TRUE), .groups = 'drop') %>%
+    
+    # Arrange by the highest number of reads
+    arrange(desc(SpikeinReadsExact))
+    
+  # Create a dataframe for sequences that do not match any gblock sequence
+  spikein_no_match_df <- spikein_counts_df %>%
+    group_by(Well) %>%
+    filter(!str_detect(Spikein, paste(gblock_sequence$GBlockSequence, collapse = "|"))) %>%
+    summarise(UnexpectedSeqCount = sum(Reads), .groups = 'drop')
+  
+  # Join data and calculate the proportion of perfect matches
+  spikin_perfect_match_df %>%
+    left_join(spikein_no_match_df, by = "Well") %>%
+    left_join(dilutions_df %>% select(-SampleID), by = "Well") %>%
     distinct(SampleID, SIDilution, SIPrimerDilution, Reads, UnexpectedSeqCount) %>%
     mutate(ProportionPerfectMatch = Reads / (Reads + UnexpectedSeqCount))
 }
 
-spikein_summary_df <- compute_spikein_summary(spikeins_df, gblock_sequence, dilutions_df)
-spikein_summary_df[spikein_summary_df$SampleID == "BO1_110SI_110PR_042024_SI_IX", ]$SampleID = "B01_110SI_110PR_042024_SI_IX"
-spikein_summary_df[is.na(spikein_summary_df$UnexpectedSeqCount), ]$UnexpectedSeqCount = 0
-spikein_summary_df[is.na(spikein_summary_df$ProportionPerfectMatch), ]$ProportionPerfectMatch = 0
+
+# Usage example
+spikein_summary_df <- compute_spikein_summary(spikein_counts_df, gblock_sequence, dilutions_df)
+
+# spikein_summary_df[spikein_summary_df$SampleID == "BO1_110SI_110PR_042024_SI_IX", ]$SampleID = "B01_110SI_110PR_042024_SI_IX"
+# spikein_summary_df[is.na(spikein_summary_df$UnexpectedSeqCount), ]$UnexpectedSeqCount = 0
+# spikein_summary_df[is.na(spikein_summary_df$ProportionPerfectMatch), ]$ProportionPerfectMatch = 0
 spikein_summary_df <- spikein_summary_df %>%
   filter(spikein_summary_df$SIDilution != "" & SIPrimerDilution != "") 
 
 write.csv(spikein_summary_df, file = "spikein_summary.csv", quote = F, row.names = F)
+
+# Join gblock_sequence data with the spikein counts data on Spikeins
+spikin_perfect_match_df <- spikein_counts_df %>%
+  left_join(gblock_sequence, by = c("Spikeins" = "SpikeinID")) %>%
+  
+  # For each sample, calculate the exact reads matching a GBlockSequence
+  rowwise() %>%
+  mutate(
+    SpikeinReadsExact = ifelse(str_detect(GBlockSequence, Spikein), Reads, 0) # Detect if the spikein matches the GBlockSequence
+  ) %>%
+  ungroup() %>%
+  
+  # Group by relevant fields and sum the exact match reads for each sample
+  group_by(SampleID, Well, Spikeins) %>%
+  summarise(SpikeinReadsExact = sum(SpikeinReadsExact, na.rm = TRUE), .groups = 'drop') %>%
+  
+  # Arrange by the highest number of reads
+  arrange(desc(SpikeinReadsExact))
 ```
 
 
@@ -87,12 +162,14 @@ write.csv(spikein_summary_df, file = "spikein_summary.csv", quote = F, row.names
 library(ggbeeswarm)
 library(patchwork)
 joined_df <- amplicons_df %>%
-  left_join(spikein_counts_df, by = c("Well", "SampleID")) %>%
-  left_join(dilutions_df %>% select(-SampleID), by = c("Well"))
+  left_join(spikin_perfect_match_df %>% select(-SampleID) %>% dplyr::rename(SpikinReads = SpikeinReadsExact), by = c("Well")) %>%
+  left_join(dilutions_df %>% select(-SampleID), by = c("Well")) %>%
+  mutate(SpikinReads = replace_na(SpikinReads, 0)) %>%
+  mutate(Spikeins = replace_na(Spikeins, "None"))
 
-joined_df[joined_df$SampleID == "BO1_110SI_110PR_042024_SI_IX", ]$SampleID = "B01_110SI_110PR_042024_SI_IX"
-joined_df[joined_df$SampleID == "B01_110SI_110PR_042024_SI_IX", ]$Well = "B01"
-joined_df[is.na(joined_df)] <- 0
+# joined_df[joined_df$SampleID == "BO1_110SI_110PR_042024_SI_IX", ]$SampleID = "B01_110SI_110PR_042024_SI_IX"
+# joined_df[joined_df$SampleID == "B01_110SI_110PR_042024_SI_IX", ]$Well = "B01"
+# joined_df[is.na(joined_df)] <- 0
 
 # Function to sort dilutions by increasing dilution
 factorize_dilutions <- function(dilutions) {
@@ -117,7 +194,8 @@ joined_df$SIPrimerDilution <- factorize_dilutions(joined_df$SIPrimerDilution)
 # Create the Interaction without appending "(Pos)" or "(Neg)"
 joined_df <- joined_df %>%
   mutate(Interaction = interaction(SIDilution, SIPrimerDilution, sep = " x ", lex.order = TRUE)) %>%
-  mutate(ControlType = if_else(grepl("Neg", SampleID), "Neg", "Pos"))
+  mutate(ControlType = if_else(grepl("(negative|Neg|negcontrol)", SampleID), "Neg", "Pos"))
+  # mutate(ControlType = if_else(grepl("Neg", SampleID), "Neg", "Pos"))
 
 # Save the levels and reorder after appending "(Pos)" and "(Neg)"
 interaction_levels <- levels(joined_df$Interaction)
@@ -132,11 +210,55 @@ joined_df <- joined_df %>%
 combined_levels <- c(interaction_levels_pos, interaction_levels_neg)
 joined_df$Interaction <- factor(joined_df$Interaction, levels = combined_levels)
 
+```
+
+## Read correlation plot
+
+### Sample Level correlation
+
+```{r}
+# Summing Reads and SpikinReads by Well
+well_sum_df <- joined_df %>%
+  filter(Spikeins != "None") %>%
+  group_by(Well) %>%
+  reframe(
+    TotalReads = mean(Reads, na.rm = TRUE),
+    TotalSpikinReads = mean(SpikinReads, na.rm = TRUE)
+  )
+
+hist(well_sum_df$TotalReads)
+hist(well_sum_df$TotalSpikinReads)
+
+# Calculate correlation
+well_correlation <- cor(well_sum_df$TotalReads, well_sum_df$TotalSpikinReads, method = "pearson")
+
+# Correlation plot for Well
+well_correlation_plot <- ggplot(well_sum_df, aes(x = TotalReads, y = TotalSpikinReads)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(
+    title = paste("Correlation Between SpikinReads and Reads by Well: p =", round(well_correlation, 2)),
+    x = "Average Reads by Well",
+    y = "Average SpikinReads by Well"
+  ) +
+  theme_minimal()
+
+# Print the plot
+print(well_correlation_plot)
+
+```
+
+## Read vs spikin jitter plot
+
+```{r}
 # Continue with the rest of the data manipulation
 joined_df <- joined_df %>%
   mutate(Reads = log1p(Reads), SpikinReads = log1p(SpikinReads)) %>%
   group_by(Interaction) %>%
   mutate(MeanSpikin = mean(SpikinReads)) %>%
+  mutate(
+    MeanSpikin = replace_na(MeanSpikin, 0),
+    SpikinReads = replace_na(SpikinReads, 0)) %>%
   ungroup()
   
 replicate_df <- joined_df %>% 
@@ -145,22 +267,93 @@ replicate_df <- joined_df %>%
   mutate(Replicate = as.factor(row_number()))
 
 joined_df <- joined_df %>%
-  left_join(replicate_df, by = c("SampleID", "Interaction"))
+  left_join(replicate_df, by = c("SampleID", "Interaction")) %>%
+  mutate(Well_Label = paste(Well, ControlType, sep = " - ")) # Combine Well and ControlType
 
-abundances_plot <- ggplot(joined_df, aes(x = Interaction, y = Reads, fill = Replicate)) +
-  geom_quasirandom(dodge.width = 0.8, colour = "#56B4E9") +
+# abundances_plot <- ggplot(joined_df, aes(x = Interaction, y = Reads, fill = Replicate)) +
+#   geom_quasirandom(dodge.width = 0.8, colour = "#134e90") +
+#   theme_minimal() +
+#   labs(
+#     title = NULL,
+#     x = "Interaction Groups (GBlock x Primer)",
+#     y = "Reads (log1p)",
+#     fill = element_blank(), 
+#     subtitle = NULL
+#   ) +
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+#   
+#   # Color spike-in points by Spikeins
+#   geom_point(aes(x = Interaction, y = SpikinReads, color = Spikeins), size = 2, shape = 8) +
+#   
+#   # Remove the 'fill' legend related to Replicate
+#   guides(fill = "none") +  # Hide the fill legend
+#   
+#   # Customize the legend for Spikeins
+#   guides(color = guide_legend(title = "Spikeins", override.aes = list(size = 4))) +
+#   
+#   # Other settings
+#   theme(legend.position = "right") +
+#   facet_wrap(~ Well) +
+#   labs(
+#     title = "Spike-in and Amplicon Read Counts by Interaction Group across Parasitemia Levels", 
+#     subtitle = "Spike-in points colored by Spikeins"
+#   )
+# 
+# print(abundances_plot)
+
+# Plot for the first interaction group with Well and ControlType on x-axis
+interaction_group1_plot <- ggplot(joined_df %>% filter(Interaction == "0 x 0 (Pos)"), aes(x = Well_Label, y = Reads, fill = Replicate)) +
+  geom_jitter(width = 0.2, height = 0.1, colour = "#134e90") +  # Add jitter for better visualization
   theme_minimal() +
   labs(
-    title = NULL,
-     x = "Interaction Groups (GBlock x Primer)",
-     y = "Reads (log1p)",
-     fill = element_blank(), subtitle = NULL
+    title = "Spike-in and Amplicon Read Counts for 0 x 0 (Pos)",
+    x = "Well - Control Type",
+    y = "Reads (log1p)",
+    fill = element_blank(), 
+    subtitle = NULL
   ) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
-  geom_point(aes(x = Interaction, y = SpikinReads), color = "red", size = 2, shape = 8, fill = "red") +
-  theme(legend.position="none")
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  
+  # Color spike-in points by Spikeins
+  geom_point(aes(x = Well_Label, y = SpikinReads, color = Spikeins), size = 3, shape = 8) +  # Adjust size and shape
+  
+  # Remove the 'fill' legend related to Replicate
+  guides(fill = "none") +  # Hide the fill legend
+  
+  # Customize the legend for Spikeins
+  guides(color = guide_legend(title = "Spikeins", override.aes = list(size = 4))) +
+  
+  # Other settings
+  theme(legend.position = "right")
 
-print(abundances_plot)
+# Plot for the second interaction group with Well and ControlType on x-axis
+interaction_group2_plot <- ggplot(joined_df %>% filter(Interaction == "1:10 x 1:250 (Pos)"), aes(x = Well_Label, y = Reads, fill = Replicate)) +
+  geom_jitter(width = 0.2, height = 0.1, colour = "#134e90") +  # Add jitter for better visualization
+  theme_minimal() +
+  labs(
+    title = "Spike-in and Amplicon Read Counts for 1:10 x 1:250 (Pos)",
+    x = "Well - Control Type",
+    y = "Reads (log1p)",
+    fill = element_blank(), 
+    subtitle = NULL
+  ) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  
+  # Color spike-in points by Spikeins
+  geom_point(aes(x = Well_Label, y = SpikinReads, color = Spikeins), size = 3, shape = 8) +  # Adjust size and shape
+  
+  # Remove the 'fill' legend related to Replicate
+  guides(fill = "none") +  # Hide the fill legend
+  
+  # Customize the legend for Spikeins
+  guides(color = guide_legend(title = "Spikeins", override.aes = list(size = 4))) +
+  
+  # Other settings
+  theme(legend.position = "right")
+
+# Print both plots
+print(interaction_group1_plot)
+print(interaction_group2_plot)
 
 x <- joined_df %>% 
   group_by(Interaction, Well) %>%
@@ -170,38 +363,19 @@ print(x)
 
 output <- joined_df %>%
   distinct(SampleID, SIDilution, SIPrimerDilution, ControlType) %>%
-  left_join(spikein_summary_df %>% select(SampleID, ExactMatchReads = Reads, UnexpectedSeqCount), by = c("SampleID")) %>%
+  left_join(spikin_perfect_match_df %>% select(SampleID, ExactMatchReads = SpikeinReadsExact, UnexpectedSeqCount), by = c("SampleID")) %>%
   mutate(ProportionCorrect = ExactMatchReads / (ExactMatchReads + UnexpectedSeqCount)) %>%
   arrange(desc(ProportionCorrect))
 
 output[is.na(output)] <- 0
 write.csv(output, file = "spikin_counts.csv")     
 
-# "#56B4E9"
-sampleID_0_10 <- joined_df %>%
-  filter(Interaction == "0 x 1:10 (Pos)") %>%
-  distinct(SampleID)
-
-x <- spikein_counts_df %>% 
-  inner_join(sampleID_0_10, by = c("SampleID")) %>%
-  mutate(Log1pSpikinReads = log10(SpikinReads))
-
-spike_df <- read.table("~/Documents/GitHub/gblock-detection/results/stats/spikein_data.txt", header = T) %>%
-  group_by(SampleID) %>% 
-  top_n(1, Reads) %>%
-  mutate(SampleID = str_replace_all(SampleID, "_IX_.*$", "_IX")) %>%
-  inner_join(sampleID_0_10, by = c("SampleID"))
-
-hist(x$SpikinReads)
-
-write.csv(spike_df, file="spikins_in_0_x_1:10_(Pos).csv", quote=F, row.names=F)
-
 # spikein_summary_df$Interaction <- factor(spikein_summary_df$Interaction, levels = combined_levels)
 
 library(scales) # For the percent_format() function
 spikein_summary_df <- spikein_summary_df %>%
   mutate(Interaction = interaction(SIDilution, SIPrimerDilution, sep = " x ", lex.order = TRUE)) %>%
-  mutate(ControlType = if_else(grepl("Neg", SampleID), "Neg", "Pos"))
+  mutate(ControlType = if_else(grepl("(negative|Neg|negcontrol)", SampleID), "Neg", "Pos"))
   
 # Save the levels and reorder after appending "(Pos)" and "(Neg)"
 interaction_levels <- levels(spikein_summary_df$Interaction)
@@ -241,6 +415,8 @@ ggplot(spikein_summary_df, aes(x = Interaction, y = ProportionPerfectMatch)) +
             color = "blue", size = 3, angle = 90, vjust = 0.5, hjust = 1)
 ```
 
+## Look at read correlation
+
 
 ```{r}
 # Convert necessary columns to factors
@@ -260,12 +436,15 @@ Looks like the spikeins are also appearing, particularly when the primer dilutio
 ## Look at the different groups to see if we're getting odd allele counts
 
 ```{r}
-alleledata_df <- read.table("mad4hatter-runs/victoria_results_2024_06_03/allele_data.txt", sep = "\t", header = TRUE) %>%
-  mutate(Well = str_extract(SampleID, "(^[A-Z][0-9]+)_", group = 1)) %>%
+alleledata_df <- read.table("mad4hatter-runs/resultsxi/allele_data.txt", sep = "\t", header = TRUE) %>%
+  mutate(
+   Well = str_extract(SampleID, "(^.*-[A-Z][0-9]+)-", group = 1),
+   Well = str_replace(Well, "(SDSI[0-9]-|negcontrol-|original-|SDSI[0-9]_[0-9]-|SDSI[0-9]_[0-9]_[0-9]-|SDSI[0-9],[0-9]-|SDSI[0-9],[0-9],[0-9]-)", "")
+  ) %>%
   select(-SampleID)
 
 unfiltered_alleledata_joined_df <- joined_df %>%
-  select(Well, Locus, SpikinReads, SIDilution,SIPrimerDilution, Interaction, ControlType, MeanSpikin, Replicate) %>%
+  select(Well, Locus, SpikinReads, SIDilution,SIPrimerDilution, Interaction, ControlType, MeanSpikin, Replicate, Density) %>%
   left_join(alleledata_df, by = join_by(Well, Locus)) %>%
   mutate(Well = as.factor(Well))
 
@@ -379,30 +558,51 @@ calculate_fn_details <- function(control, experiment) {
   return (fn_final_df)
 }
 
-# Prepare the control group data
-control_data <- alleledata_joined_df %>%
-  filter(Interaction == "0 x 0 (Pos)") %>%
-  select(Well = Well, Locus, ASV, PseudoCIGAR, Reads)
-
 # Prepare experimental groups dynamically
 interaction_types <- setdiff(unique(alleledata_joined_df$Interaction), "0 x 0 (Pos)")
+density_levels <- unique(alleledata_joined_df$Density)
 # results_list <- list()
 results_list_with_pseudocigar <- list()
 fn_details <- list()
 
 # Iterate over each interaction type to calculate metrics
-for (interaction in interaction_types) {
-  experiment_data <- alleledata_joined_df %>%
-    filter(Interaction == interaction) %>%
-    select(Well = Well, Locus, ASV, PseudoCIGAR, Reads)
-  
-  results <- calculate_metrics_with_pseudocigar(control_data, experiment_data)
-  results$Interaction <- interaction
-  results_list_with_pseudocigar[[interaction]] <- results
-  
-  results <- calculate_fn_details(control_data, experiment_data)
-  results$Interaction <- interaction
-  fn_details[[interaction]] <- results
+for (density in density_levels) {
+  for (interaction in interaction_types) {
+    
+    cat("Processing interaction:", interaction, "Density:", density, "\n")
+    
+    experiment_data <- alleledata_joined_df %>%
+      filter(Interaction == interaction & Density == density) %>%
+      select(Well = Well, Locus, ASV, PseudoCIGAR, Reads)
+    
+    if (nrow(experiment_data) == 0) {
+      cat("No data for interaction:", interaction, "Density:", density, "\n")
+      next
+    }
+    
+    # Prepare the control group data
+    control_data <- alleledata_joined_df %>%
+      filter(Interaction == "0 x 0 (Pos)" & Density == density) %>%
+      select(Well = Well, Locus, ASV, PseudoCIGAR, Reads)
+    
+    id <- paste(interaction, density, sep = ";")
+    
+    cat("Calculating metrics for interaction:", interaction, "Density:", density, "\n")
+    cat("Id:", id, "\n")
+
+    results <- calculate_metrics_with_pseudocigar(control_data, experiment_data)
+    
+    print(results)
+    
+    results$Interaction <- interaction
+    results$Density <- density
+    results_list_with_pseudocigar[[id]] <- results
+    
+    results <- calculate_fn_details(control_data, experiment_data)
+    results$Interaction <- interaction
+    results$Density <- density
+    fn_details[[id]] <- results
+  }
 }
 
 # Combine all results into a single dataframe
@@ -417,11 +617,17 @@ print(final_results_with_pseudocigar)
 interaction_groups_df <- spikein_summary_df %>%
   distinct(Interaction, ControlType)
 
+denisty_df <- dilutions_df %>%
+  distinct(Well_exp = Well, Density) %>%
+  mutate(Density = ifelse(Density >= 1000, 1000, Density))
+
 # final_results_df <- final_results %>%
 #   left_join(interaction_groups_df, by = join_by(Interaction))
 
 final_results_with_pseudocigar_df <- final_results_with_pseudocigar %>%
-  left_join(interaction_groups_df, by = join_by(Interaction))
+  mutate(Density = ifelse(Density >= 1000, 1000, Density)) %>%
+  # left_join(interaction_groups_df, by = join_by(Interaction)) %>%
+  left_join(denisty_df, by = join_by(Well_exp, Density))
 
 # ggplot(final_results_df, aes(x = Precision, y = Recall)) +
 #   geom_point(aes(color = Interaction, shape = ControlType), size = 6) +
@@ -472,7 +678,9 @@ combined_plot <- ggplot(reshaped_df, aes(x = Interaction, y = Value, fill = Metr
   theme(
     axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
     legend.position = "right"
-  )
+  ) +
+  facet_wrap(~ Density) +
+  labs(title = "Precision and Recall of interaction groups compared to control group (0 x 0 (Pos))")
 
 print(combined_plot)
 

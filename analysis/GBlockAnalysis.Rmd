@@ -15,22 +15,21 @@ setwd("/home/bpalmer/Documents/GitHub/gblock-detection/analysis")
 ```
 
 ```{r}
-spikein_counts_df <- read_delim("~/Documents/GitHub/gblock-detection/spikeins_xii_results/stats/spikeins_data.txt") %>%
+spikein_counts_df <- read_delim("~/Documents/GitHub/gblock-detection/spikeins_xi_results/stats/spikeins_data.txt") %>%
   group_by(SampleID) %>%
   # Remove unnecessary parts and extract Well and SDSI
   mutate(
     Well = str_extract(SampleID, "(^.*-[A-Z][0-9]+)-", group = 1),
-    Well = str_replace(Well, "(SDSI1andSDSI2-|SDSI[0-9]-|negcontrol-|original-|SDSI[0-9]_[0-9]-|SDSI[0-9]_[0-9]_[0-9]-|SDSI[0-9],[0-9]-|SDSI[0-9],[0-9],[0-9]-)", "")
-  )
-  #   SDSI = str_extract(SampleID, "SDSI[0-9](_[0-9])*"),
-  #   SDSI = str_replace_all(SDSI, "_", ","), # Convert underscores to commas for separation
-  #   Spikeins = str_split(SDSI, ",") # Split into individual Spikeins
-  # ) %>%
-  # unnest(Spikeins) %>%  # Create separate rows for each Spikein
-  # mutate(
-  #   Spikeins = ifelse(grepl("^[0-9]+$", Spikeins), paste0("SDSI", Spikeins), Spikeins) # Add "SDSI" prefix to numeric Spikeins
-  # ) %>%
-  # ungroup()
+    Well = str_replace(Well, "(SDSI[0-9]-|negcontrol-|original-|SDSI[0-9]_[0-9]-|SDSI[0-9]_[0-9]_[0-9]-|SDSI[0-9],[0-9]-|SDSI[0-9],[0-9],[0-9]-)", ""),
+    SDSI = str_extract(SampleID, "SDSI[0-9](_[0-9])*"),
+    SDSI = str_replace_all(SDSI, "_", ","), # Convert underscores to commas for separation
+    Spikeins = str_split(SDSI, ",") # Split into individual Spikeins
+  ) %>%
+  unnest(Spikeins) %>%  # Create separate rows for each Spikein
+  mutate(
+    Spikeins = ifelse(grepl("^[0-9]+$", Spikeins), paste0("SDSI", Spikeins), Spikeins) # Add "SDSI" prefix to numeric Spikeins
+  ) %>%
+  ungroup()
 
 # spikein_counts_df <- read_delim("~/Documents/GitHub/gblock-detection/spikeins_xi_results/stats/spikeins_data.txt")
 # # print(spikein_counts_df, n = 100)
@@ -38,28 +37,25 @@ spikein_counts_df <- read_delim("~/Documents/GitHub/gblock-detection/spikeins_xi
 pool5 <- read.table("pool_5.txt", header = F) %>% pull()
 
 species_loci = c('PmUG01_12_v1-1397996-1398245-1AB','PocGH01_12_v1-1106456-1106697-1AB','PvP01_12_v1-1184983-1185208-1AB')
-amplicons_df <- read_delim("~/Documents/GitHub/gblock-detection/spikeins_xii_results/amplicon_coverage.txt") %>%
+amplicons_df <- read_delim("~/Documents/GitHub/gblock-detection/spikeins_xi_results/amplicon_coverage.txt") %>%
   # mutate(SampleID = str_replace_all(SampleID, "_S[0-9]+_L005$", "")) %>% # results ix
   # mutate(Well = str_extract(SampleID, "(^[A-Z][0-9]+)-", group = 1)) %>% # results ix
   mutate(Well = str_extract(SampleID, "(^.*-[A-Z][0-9]+)-", group = 1)) %>% # results xi
   mutate(Well = str_replace(Well, "(SDSI[0-9]-|negcontrol-|original-|SDSI[0-9]_[0-9]-|SDSI[0-9]_[0-9]_[0-9]-)", "")) %>% # resultx xi
   filter((grepl("-1A$", Locus) | Locus %in% pool5) & !(Locus %in% species_loci)) # results xi
 
-metadata_df <-  read_csv("~/Documents/GitHub/gblock-detection/Spike-In_METADATA_XII.csv")
+metadata_df <-  read_csv("~/Documents/GitHub/gblock-detection/spikein_xi_metadata.csv")
 dilutions_df <- metadata_df %>%
   select(
     SampleID = `Sample name for sequencing`,
-    Density = `Parasite density of sample`,
-    Spikeins = spikeins,
-    Well
+    Density = `parasite_density`
   ) %>%
   mutate(
-    Density = replace_na(Density, 0),
-    SIDilution = ifelse((Density > 0 & !grepl("original", SampleID) | grepl("template", SampleID)), "1:10", "0"),
-    SIPrimerDilution = ifelse((Density > 0 & !grepl("original", SampleID) | grepl("template", SampleID)), "1:250", "0"),
+    SIDilution = ifelse(Density > 0 & !grepl("original", SampleID), "1:10", "0"),
+    SIPrimerDilution = ifelse(Density > 0 & !grepl("original", SampleID), "1:250", "0"),
     # Well = str_extract(SampleID, "(^[A-Z][0-9]+)-", group = 1),
-    Well = Well
-    # Well = str_replace(Well, "(SDSI[0-9]-|negcontrol-|original-|SDSI[0-9]_[0-9]-|SDSI[0-9]_[0-9]_[0-9]-|SDSI[0-9],[0-9]-|SDSI[0-9],[0-9],[0-9]-)", ""), # resultx xi
+    Well = str_extract(SampleID, "(^.*-[A-Z][0-9]+)-", group = 1), # results xi
+    Well = str_replace(Well, "(SDSI[0-9]-|negcontrol-|original-|SDSI[0-9]_[0-9]-|SDSI[0-9]_[0-9]_[0-9]-|SDSI[0-9],[0-9]-|SDSI[0-9],[0-9],[0-9]-)", ""), # resultx xi
     # Density = factor(Density, levels = c("H2O", "100", "1000"))
   )
 
@@ -144,17 +140,21 @@ write.csv(spikein_summary_df, file = "spikein_summary.csv", quote = F, row.names
 
 # Join gblock_sequence data with the spikein counts data on Spikeins
 spikin_perfect_match_df <- spikein_counts_df %>%
-  left_join(gblock_sequence, by = c("Spikein" = "GBlockSequence")) %>%
-  filter(!is.na(SpikeinID)) %>%
-  mutate(SpikeinID = replace_na(SpikeinID, "None")) %>%
-  ungroup()
-
+  left_join(gblock_sequence, by = c("Spikeins" = "SpikeinID")) %>%
+  
+  # For each sample, calculate the exact reads matching a GBlockSequence
+  rowwise() %>%
+  mutate(
+    SpikeinReadsExact = ifelse(str_detect(GBlockSequence, Spikein), Reads, 0) # Detect if the spikein matches the GBlockSequence
+  ) %>%
+  ungroup() %>%
+  
   # Group by relevant fields and sum the exact match reads for each sample
-  # group_by(SampleID, Well, Spikein) %>%
-  # summarise(SpikeinReadsExact = sum(SpikeinReadsExact, na.rm = TRUE), .groups = 'drop') %>%
-  # 
-  # # Arrange by the highest number of reads
-  # arrange(desc(SpikeinReadsExact))
+  group_by(SampleID, Well, Spikeins) %>%
+  summarise(SpikeinReadsExact = sum(SpikeinReadsExact, na.rm = TRUE), .groups = 'drop') %>%
+  
+  # Arrange by the highest number of reads
+  arrange(desc(SpikeinReadsExact))
 ```
 
 
@@ -162,9 +162,10 @@ spikin_perfect_match_df <- spikein_counts_df %>%
 library(ggbeeswarm)
 library(patchwork)
 joined_df <- amplicons_df %>%
-  left_join(spikin_perfect_match_df %>% select(-SampleID) %>% dplyr::rename(SpikinReads = Reads), by = c("Well")) %>%
+  left_join(spikin_perfect_match_df %>% select(-SampleID) %>% dplyr::rename(SpikinReads = SpikeinReadsExact), by = c("Well")) %>%
   left_join(dilutions_df %>% select(-SampleID), by = c("Well")) %>%
-  mutate(SpikinReads = replace_na(SpikinReads, 0))
+  mutate(SpikinReads = replace_na(SpikinReads, 0)) %>%
+  mutate(Spikeins = replace_na(Spikeins, "None"))
 
 # joined_df[joined_df$SampleID == "BO1_110SI_110PR_042024_SI_IX", ]$SampleID = "B01_110SI_110PR_042024_SI_IX"
 # joined_df[joined_df$SampleID == "B01_110SI_110PR_042024_SI_IX", ]$Well = "B01"
@@ -218,7 +219,7 @@ joined_df$Interaction <- factor(joined_df$Interaction, levels = combined_levels)
 ```{r}
 # Summing Reads and SpikinReads by Well
 well_sum_df <- joined_df %>%
-  filter(Spikein != "None") %>%
+  filter(Spikeins != "None") %>%
   group_by(Well) %>%
   reframe(
     TotalReads = mean(Reads, na.rm = TRUE),
@@ -314,7 +315,7 @@ interaction_group1_plot <- ggplot(joined_df %>% filter(Interaction == "0 x 0 (Po
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
   
   # Color spike-in points by Spikeins
-  geom_point(aes(x = Well_Label, y = SpikinReads, color = SpikeinID), size = 3, shape = 8) +  # Adjust size and shape
+  geom_point(aes(x = Well_Label, y = SpikinReads, color = Spikeins), size = 3, shape = 8) +  # Adjust size and shape
   
   # Remove the 'fill' legend related to Replicate
   guides(fill = "none") +  # Hide the fill legend
@@ -339,7 +340,7 @@ interaction_group2_plot <- ggplot(joined_df %>% filter(Interaction == "1:10 x 1:
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
   
   # Color spike-in points by Spikeins
-  geom_point(aes(x = Well_Label, y = SpikinReads, color = SpikeinID), size = 3, shape = 8) +  # Adjust size and shape
+  geom_point(aes(x = Well_Label, y = SpikinReads, color = Spikeins), size = 3, shape = 8) +  # Adjust size and shape
   
   # Remove the 'fill' legend related to Replicate
   guides(fill = "none") +  # Hide the fill legend
